@@ -1,60 +1,45 @@
 import requests
-from bs4 import BeautifulSoup
-import re
+
+# Địa chỉ API chính xác từ tab Headers của bạn
+api_url = "https://api.tlap17062026.com/matches/graph"
 
 headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Referer': 'https://tieulam.co/'
+    'Referer': 'https://sv1.tieulamwc1.com/',
+    'Origin': 'https://sv1.tieulamwc1.com',
+    'Content-Type': 'application/json'
 }
-trang_chu = "https://tieulam.co"
 
 try:
-    response = requests.get(trang_chu, headers=headers, timeout=15)
-    soup = BeautifulSoup(response.text, 'html.parser')
+    # Gửi yêu cầu POST (kèm body trống json={} vì đây là phương thức POST)
+    response = requests.post(api_url, headers=headers, json={}, timeout=15)
     
-    # Lấy tất cả các thẻ liên kết trên trang
-    danh_sach_tran_dau = soup.find_all('a')
+    # Đọc dữ liệu định dạng JSON
+    data = response.json()
     
     m3u_content = "#EXTM3U\n"
-    cac_link_da_quet = set() # Tránh trùng lặp trận đấu
-
-    print(f"Tìm thấy tổng cộng {len(danh_sach_tran_dau)} liên kết trên trang chủ.")
-
-    for tran in danh_sach_tran_dau:
-        link_tran = tran.get('href', '')
-        if not link_tran or link_tran in cac_link_da_quet:
-            continue
+    count = 0
+    
+    # Duyệt qua danh sách các trận đấu trả về từ API
+    for match in data.get('data', []):
+        title = match.get('title')
+        m3u8_link = match.get('source_live')
+        is_live = match.get('is_live', False)
+        
+        # Nếu trận đấu có link phát m3u8 thì ghi vào file
+        if m3u8_link:
+            trang_thai = "[LIVE] " if is_live else "[SẮP ĐÁ] "
+            m3u_content += f"#EXTINF:-1, {trang_thai}{title}\n"
+            m3u_content += f"#EXTVLCOPT:http-referrer=https://sv1.tieulamwc1.com/\n"
+            m3u_content += f"{m3u8_link}\n"
+            count += 1
+            print(f"Đã thêm trận: {title}")
             
-        # Kiểm tra nếu link dẫn tới một trang con (bỏ qua link nhảy trang chủ hoặc link ngoài)
-        if link_tran.startswith('/') or trang_chu in link_tran:
-            if link_tran == '/' or link_tran == trang_chu:
-                continue
-                
-            cac_link_da_quet.add(link_tran)
-            if not link_tran.startswith('http'):
-                link_tran = trang_chu + link_tran
-                
-            try:
-                # Quét vào bên trong trang chi tiết của trận đấu
-                chi_tiet = requests.get(link_tran, headers=headers, timeout=5)
-                # Tìm luồng m3u8 ẩn bên trong
-                match = re.search(r'(https?://[^\s"\'<>]+?\.m3u8[^\s"\'<>]*)', chi_tiet.text)
-                
-                if match:
-                    ten_tran = tran.text.strip() or "Trực tiếp Bóng Đá"
-                    link_m3u8 = match.group(1)
-                    
-                    m3u_content += f"#EXTINF:-1, {ten_tran}\n"
-                    m3u_content += f"#EXTVLCOPT:http-referrer={trang_chu}\n"
-                    m3u_content += f"{link_m3u8}\n"
-                    print(f"Đã bắt được trận: {ten_tran}")
-            except:
-                continue
-
-    # Ghi file
+    # Ghi nội dung vào file bongda.m3u
     with open('bongda.m3u', 'w', encoding='utf-8') as f:
         f.write(m3u_content)
-    print("Quá trình quét hoàn tất!")
+        
+    print(f"Thành công! Đã quét được {count} trận đấu vào file m3u.")
 
 except Exception as e:
-    print(f"Lỗi hệ thống: {e}")
+    print(f"Lỗi khi xử lý dữ liệu từ API: {e}")
