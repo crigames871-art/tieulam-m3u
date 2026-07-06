@@ -1,3 +1,7 @@
 #EXTM3U
-#EXTINF:-1, Tat ca cac dai IP deu bi chan 403
-http://error.com
+#EXTINF:-1, LOI: 403
+#EXTINF:-1, NOI DUNG TRANG WEB TRA VE:
+#EXTINF:-1, <!DOCTYPE html>
+<!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en-US"> <![endif]-->
+<!--[if IE 7]>    <html class="no-js ie7 oldie" lang="en-US"> <![endif]-->
+<!--[if IE 8]>    <html class="no-
