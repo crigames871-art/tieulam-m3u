@@ -3,53 +3,58 @@ import json
 
 def run():
     with sync_playwright() as p:
-        # Khởi chạy trình duyệt ẩn danh (Headless Chromium)
+        # Cấu hình trình duyệt giống người dùng thật
         browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+        )
+        page = context.new_page()
         
+        # Biến lưu trữ dữ liệu
+        api_data = None
+
+        # Thiết lập "cái bẫy" để bắt lấy dữ liệu khi trang web tải xong
+        def handle_response(response):
+            nonlocal api_data
+            if "api.tlap17062026.com/matches/graph" in response.url:
+                try:
+                    api_data = response.json()
+                except:
+                    pass
+
+        page.on("response", handle_response)
+
         # Truy cập trang web
-        print("Đang truy cập trang web...")
+        print("Đang truy cập...")
         page.goto("https://sv1.tieulamwc1.com/", wait_until="networkidle")
         
-        # Đợi một chút để Cloudflare xử lý (nếu có)
+        # Đợi thêm 5 giây để chắc chắn các yêu cầu API đã chạy xong
         page.wait_for_timeout(5000)
         
-        # Thử lấy dữ liệu từ API thông qua trình duyệt
-        # Chúng ta dùng page.evaluate để gọi API từ trong ngữ cảnh của trình duyệt
-        data = page.evaluate("""
-            async () => {
-                const response = await fetch('https://api.tlap17062026.com/matches/graph', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        "limit": 9, "page": 1, "order_asc": "start_date",
-                        "queries": [{"field": "is_top", "type": "equal", "value": true}, {"field": "blv", "type": "not_equal", "value": null}]
-                    })
-                });
-                return await response.json();
-            }
-        """)
-        
         browser.close()
-        return data
+        return api_data
 
 try:
     data = run()
-    m3u_content = "#EXTM3U\n"
-    count = 0
     
-    for match in data.get('data', []):
-        title = match.get('title')
-        m3u8_link = match.get('source_live')
-        if m3u8_link:
-            m3u_content += f"#EXTINF:-1, {title}\n{m3u8_link}\n"
-            count += 1
-            
-    with open('bongda.m3u', 'w', encoding='utf-8') as f:
-        f.write(m3u_content)
-    print(f"Thành công! Lấy được {count} trận.")
+    if data and 'data' in data:
+        m3u_content = "#EXTM3U\n"
+        count = 0
+        for match in data.get('data', []):
+            title = match.get('title')
+            m3u8_link = match.get('source_live')
+            if m3u8_link:
+                m3u_content += f"#EXTINF:-1, {title}\n{m3u8_link}\n"
+                count += 1
+                
+        with open('bongda.m3u', 'w', encoding='utf-8') as f:
+            f.write(m3u_content)
+        print(f"Thành công! Lấy được {count} trận.")
+    else:
+        print("Không bắt được dữ liệu API.")
+        with open('bongda.m3u', 'w', encoding='utf-8') as f:
+            f.write("#EXTM3U\n#EXTINF:-1, Khong lay duoc du lieu API\nhttp://error.com")
 
 except Exception as e:
     with open('bongda.m3u', 'w', encoding='utf-8') as f:
         f.write(f"#EXTM3U\n#EXTINF:-1, Loi: {str(e)[:50]}\nhttp://error.com")
-    print(f"Lỗi: {e}")
