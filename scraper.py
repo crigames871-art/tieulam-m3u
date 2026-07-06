@@ -1,42 +1,55 @@
-from curl_cffi import requests
+from playwright.sync_api import sync_playwright
+import json
 
-api_url = "https://api.tlap17062026.com/matches/graph"
-
-headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-    'Accept': 'application/json, text/plain, */*',
-    'Content-Type': 'application/json',
-    'Origin': 'https://sv1.tieulamwc1.com',
-    'Referer': 'https://sv1.tieulamwc1.com/'
-}
-
-payload = {
-    "limit": 9,
-    "page": 1,
-    "order_asc": "start_date",
-    "queries": [
-        {"field": "is_top", "type": "equal", "value": True},
-        {"field": "blv", "type": "not_equal", "value": None}
-    ]
-}
+def run():
+    with sync_playwright() as p:
+        # Khởi chạy trình duyệt ẩn danh (Headless Chromium)
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        
+        # Truy cập trang web
+        print("Đang truy cập trang web...")
+        page.goto("https://sv1.tieulamwc1.com/", wait_until="networkidle")
+        
+        # Đợi một chút để Cloudflare xử lý (nếu có)
+        page.wait_for_timeout(5000)
+        
+        # Thử lấy dữ liệu từ API thông qua trình duyệt
+        # Chúng ta dùng page.evaluate để gọi API từ trong ngữ cảnh của trình duyệt
+        data = page.evaluate("""
+            async () => {
+                const response = await fetch('https://api.tlap17062026.com/matches/graph', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        "limit": 9, "page": 1, "order_asc": "start_date",
+                        "queries": [{"field": "is_top", "type": "equal", "value": true}, {"field": "blv", "type": "not_equal", "value": null}]
+                    })
+                });
+                return await response.json();
+            }
+        """)
+        
+        browser.close()
+        return data
 
 try:
-    # Thử gọi trực tiếp, nếu lỗi sẽ in ra nội dung để chẩn đoán
-    response = requests.post(api_url, headers=headers, json=payload, impersonate="chrome120", timeout=15)
+    data = run()
+    m3u_content = "#EXTM3U\n"
+    count = 0
     
-    if response.status_code == 200:
-        data = response.json()
-        # ... (Phần xử lý m3u giữ nguyên như cũ) ...
-        print("Kết nối thành công!")
-    else:
-        # GHI LẠI LỖI VÀO FILE M3U ĐỂ BẠN ĐỌC
-        error_content = f"#EXTM3U\n#EXTINF:-1, LOI: {response.status_code}\n"
-        error_content += f"#EXTINF:-1, NOI DUNG TRANG WEB TRA VE:\n"
-        error_content += f"#EXTINF:-1, {response.text[:200]}" # Chỉ lấy 200 ký tự đầu
-        with open('bongda.m3u', 'w', encoding='utf-8') as f:
-            f.write(error_content)
-        print(f"Lỗi {response.status_code}. Đã ghi lỗi vào file bongda.m3u để kiểm tra.")
+    for match in data.get('data', []):
+        title = match.get('title')
+        m3u8_link = match.get('source_live')
+        if m3u8_link:
+            m3u_content += f"#EXTINF:-1, {title}\n{m3u8_link}\n"
+            count += 1
+            
+    with open('bongda.m3u', 'w', encoding='utf-8') as f:
+        f.write(m3u_content)
+    print(f"Thành công! Lấy được {count} trận.")
 
 except Exception as e:
     with open('bongda.m3u', 'w', encoding='utf-8') as f:
-        f.write(f"#EXTM3U\n#EXTINF:-1, Loi exception: {str(e)[:50]}")
+        f.write(f"#EXTM3U\n#EXTINF:-1, Loi: {str(e)[:50]}\nhttp://error.com")
+    print(f"Lỗi: {e}")
