@@ -1,34 +1,35 @@
 name: Tự động cập nhật link M3U
 
 on:
+  workflow_dispatch: # Nút bấm chạy bằng tay
   schedule:
-    - cron: '0 5,11 * * *' # Tự động chạy vào 12h trưa và 18h tối giờ VN
-  workflow_dispatch: # Cho phép chạy thủ công
+    - cron: '0 */2 * * *' # Tự động chạy mỗi 2 tiếng một lần
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+    - name: Kiểm tra mã nguồn
+      uses: actions/checkout@v4
 
-      - name: Cài đặt Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
+    - name: Cài đặt Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
 
-      - name: Cài đặt thư viện
-        run: |
-          python -m pip install --upgrade pip
-          pip install requests curl_cffi
+    - name: Cài đặt thư viện chuyên dụng
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests curl_cffi
 
-      - name: Chạy Script
-        run: python scraper.py
+    - name: Chạy Script lấy link bóng đá
+      run: python scraper.py
 
-      - name: Lưu file m3u lên GitHub
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add bongda.m3u
-          git commit -m "Auto update IPTV links" || exit 0
-          git push
+    - name: Lưu file m3u lên GitHub
+      run: |
+        git config --local user.email "actions@github.com"
+        git config --local user.name "GitHub Actions"
+        git add bongda.m3u
+        git diff --quiet && git diff --staged --quiet || git commit -m "Auto update IPTV links"
+        git push
